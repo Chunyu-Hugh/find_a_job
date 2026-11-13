@@ -1,0 +1,72 @@
+name: Update job data and deploy
+
+# When this runs:
+#   - every Monday 11:00 UTC (06:00 US Eastern), automatically
+#   - whenever you push to main
+#   - on demand from the Actions tab ("Run workflow")
+on:
+  schedule:
+    - cron: "0 11 * * 1"
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: write      # to commit the refreshed data.json
+  pages: write         # to deploy GitHub Pages
+  id-token: write
+
+concurrency:
+  group: "pages"
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repo
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Rebuild data.json
+        env:
+          # Optional: set this repo secret to turn on LLM tagging of untitled jobs.
+          # Settings -> Secrets and variables -> Actions -> New repository secret
+          # Name: DEEPSEEK_API_KEY   Value: your key
+          DEEPSEEK_API_KEY: ${{ secrets.DEEPSEEK_API_KEY }}
+        run: python build_data.py
+
+      - name: Commit refreshed data (if changed)
+        run: |
+          git config user.name  "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          if ! git diff --quiet -- data.json; then
+            git add data.json
+            git commit -m "Auto-update job data ($(date -u +%Y-%m-%d))"
+            git push
+          else
+            echo "No change in data.json."
+          fi
+
+      - name: Upload site as Pages artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: .            # the whole repo root is the site (index.html + data.json)
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4

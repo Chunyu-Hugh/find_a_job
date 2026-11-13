@@ -1,0 +1,13 @@
+# Python
+__pycache__/
+*.pyc
+.venv/
+venv/
+
+# Never commit secrets or local env files
+.env
+*.key
+secrets.*
+
+# OS cruft
+.DS_Store

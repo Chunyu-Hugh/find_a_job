@@ -1,0 +1,680 @@
+<title>CS Faculty Job Atlas</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<style>
+/* Layout: fixed left control rail + map canvas up top, scrollable job list below; stacks on phones.
+   Palette: deep ink navy ground, warm paper panels, a single signal amber accent + semantic tier hues. */
+:root{
+  --bg:#f4f2ec; --panel:#fffdf8; --panel-2:#efece3; --ink:#1c2230; --ink-2:#55606f;
+  --line:#ddd7ca; --line-2:#c9c2b2; --accent:#c8671b; --accent-soft:#f0d9c0;
+  --map-land:#e7e2d6; --map-edge:#c6bda9; --dot:#1c2230;
+  --r1:#c8671b; --r2:#2f7d6e; --m:#3a6ea5; --coll:#7a5aa0; --cc:#9a8f7a; --oth:#8a93a0;
+  --hbcu:#b0197d; --hbcu-soft:#f6d7ea;
+  --good:#2f7d6e; --warn:#c8671b; --star:#e0a92e;
+  --sans:'Inter',-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;
+  --disp:'Space Grotesk','Inter',sans-serif;
+  --mono:'IBM Plex Mono',ui-monospace,'SF Mono',Menlo,monospace;
+}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){
+  --bg:#12151c; --panel:#1a1f29; --panel-2:#222836; --ink:#eef0f4; --ink-2:#9aa4b2;
+  --line:#2c3341; --line-2:#3a4354; --accent:#e8862f; --accent-soft:#3a2b1a;
+  --map-land:#232a38; --map-edge:#3a4556; --dot:#e8eaef;
+  --r1:#e8862f; --r2:#4bae9b; --m:#5b94d6; --coll:#a888d0; --cc:#8d8372; --oth:#7e8894;
+  --hbcu:#e86cbb; --hbcu-soft:#3d1830;
+  --good:#4bae9b; --warn:#e8862f; --star:#f0c050; color-scheme:dark;
+}}
+:root[data-theme="dark"]{
+  --bg:#12151c; --panel:#1a1f29; --panel-2:#222836; --ink:#eef0f4; --ink-2:#9aa4b2;
+  --line:#2c3341; --line-2:#3a4354; --accent:#e8862f; --accent-soft:#3a2b1a;
+  --map-land:#232a38; --map-edge:#3a4556; --dot:#e8eaef;
+  --r1:#e8862f; --r2:#4bae9b; --m:#5b94d6; --coll:#a888d0; --cc:#8d8372; --oth:#7e8894;
+  --hbcu:#e86cbb; --hbcu-soft:#3d1830;
+  --good:#4bae9b; --warn:#e8862f; --star:#f0c050; color-scheme:dark;
+}
+*{box-sizing:border-box}
+body{background:var(--bg);color:var(--ink);font-family:var(--sans);line-height:1.45;
+  -webkit-font-smoothing:antialiased;font-size:14px}
+body::before{content:"";position:fixed;inset:0 0 auto;height:env(safe-area-inset-top,0px);z-index:60;background:var(--panel)}
+.wrap{padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px))}
+h1,h2,h3{font-family:var(--disp);text-wrap:balance;margin:0}
+.tnum{font-variant-numeric:tabular-nums}
+
+/* Header */
+header{position:sticky;top:env(safe-area-inset-top,0px);z-index:50;background:var(--panel);
+  border-bottom:1px solid var(--line)}
+.hrow{display:flex;align-items:baseline;gap:14px;flex-wrap:wrap;padding-block:12px}
+h1{font-size:19px;font-weight:600;letter-spacing:-.01em}
+.sub{color:var(--ink-2);font-size:12.5px}
+.sub b{color:var(--ink);font-weight:600}
+.asof{margin-left:auto;font-family:var(--mono);font-size:11px;color:var(--ink-2);
+  text-transform:uppercase;letter-spacing:.04em}
+
+/* Layout grid */
+.main{display:grid;grid-template-columns:1fr;gap:18px;padding-block:18px;max-width:1280px;margin:0 auto}
+@media(min-width:960px){.main{grid-template-columns:300px 1fr;align-items:start}}
+
+/* Mobile: show map + list first, filters collapse behind a toggle */
+.filterToggle{display:none}
+@media(max-width:959px){
+  .main{display:flex;flex-direction:column}
+  .rail{order:2}
+  .mapwrap{order:1}
+  .filterToggle{display:flex;align-items:center;justify-content:space-between;gap:10px;
+    width:100%;background:var(--panel);border:1px solid var(--line);border-radius:12px;
+    padding:12px 14px;font-family:var(--disp);font-weight:600;font-size:14px;color:var(--ink);
+    cursor:pointer}
+  .filterToggle .fcount{font-family:var(--sans);font-size:12px;font-weight:500;color:var(--accent)}
+  .filterToggle .chev{transition:transform .18s;color:var(--ink-2)}
+  .filterToggle[aria-expanded="true"] .chev{transform:rotate(180deg)}
+  .rail[data-collapsed="true"] .card{display:none}
+}
+
+/* Controls rail */
+.rail{display:flex;flex-direction:column;gap:14px;min-width:0}
+@media(min-width:960px){.rail{position:sticky;top:calc(env(safe-area-inset-top,0px) + 62px)}}
+.card{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:14px}
+.card h3{font-size:11px;text-transform:uppercase;letter-spacing:.08em;color:var(--ink-2);
+  font-weight:600;margin-bottom:10px;display:flex;align-items:baseline;gap:7px;flex-wrap:wrap}
+.hint{font-size:9.5px;text-transform:none;letter-spacing:0;font-weight:500;color:var(--ink);
+  background:var(--panel-2);border:1px solid var(--line);border-radius:5px;padding:1px 6px}
+.hint.multi{color:var(--r2);border-color:var(--r2)}
+.hint.single{color:var(--m);border-color:var(--m)}
+.search{width:100%;border:1px solid var(--line-2);background:var(--panel-2);color:var(--ink);
+  border-radius:9px;padding:10px 12px;font-size:14px;font-family:var(--sans)}
+.search:focus{outline:2px solid var(--accent);outline-offset:1px;border-color:var(--accent)}
+.chips{display:flex;flex-wrap:wrap;gap:6px}
+.chip{border:1px solid var(--line-2);background:var(--panel-2);color:var(--ink-2);
+  border-radius:999px;padding:5px 10px;font-size:12px;cursor:pointer;font-family:var(--sans);
+  display:inline-flex;align-items:center;gap:6px;transition:.12s}
+.chip:hover{border-color:var(--ink-2)}
+.chip[aria-pressed="true"]{background:var(--ink);color:var(--panel);border-color:var(--ink)}
+.chip .ct{font-variant-numeric:tabular-nums;opacity:.6;font-size:11px}
+.chip .dot{width:8px;height:8px;border-radius:2px;flex:none}
+.chip.tier[aria-pressed="true"]{color:#fff}
+.chip.hbcu[aria-pressed="true"]{background:var(--hbcu);border-color:var(--hbcu);color:#fff}
+.reset{font-size:12px;color:var(--accent);background:none;border:none;cursor:pointer;padding:0;
+  font-family:var(--sans);text-decoration:underline;text-underline-offset:2px}
+.railhead{display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:10px}
+.railhead h3{margin:0}
+label.lbl{font-size:11px;text-transform:uppercase;letter-spacing:.06em;color:var(--ink-2);
+  font-weight:600;display:block;margin-bottom:7px}
+select.sel{width:100%;border:1px solid var(--line-2);background:var(--panel-2);color:var(--ink);
+  border-radius:9px;padding:9px 10px;font-size:13.5px;font-family:var(--sans)}
+.toggle-row{display:flex;flex-direction:column;gap:8px}
+.tcheck{display:flex;align-items:center;gap:8px;font-size:13px;cursor:pointer;color:var(--ink)}
+.tcheck input{width:16px;height:16px;accent-color:var(--accent)}
+.tcheck .ct{font-variant-numeric:tabular-nums;color:var(--ink-2);font-size:11.5px;margin-left:auto}
+
+/* Map */
+.mapwrap{min-width:0}
+.mapcard{background:var(--panel);border:1px solid var(--line);border-radius:12px;overflow:hidden}
+.maptop{display:flex;align-items:center;gap:10px;flex-wrap:wrap;padding:12px 14px;border-bottom:1px solid var(--line)}
+.maptop h2{font-size:14px;font-weight:600}
+.legend{display:flex;gap:12px;flex-wrap:wrap;margin-left:auto;font-size:11.5px;color:var(--ink-2)}
+.legend span{display:inline-flex;align-items:center;gap:5px}
+.legend i{width:9px;height:9px;border-radius:2px;display:inline-block}
+#map{display:block;width:100%;height:auto;background:transparent;touch-action:manipulation}
+.mapnote{padding:8px 14px;font-size:11.5px;color:var(--ink-2);border-top:1px solid var(--line);
+  display:flex;gap:6px;align-items:center}
+
+/* Stat tiles */
+.stats{display:grid;grid-template-columns:repeat(2,1fr);gap:10px}
+@media(min-width:520px){.stats{grid-template-columns:repeat(4,1fr)}}
+.tile{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:12px 14px}
+.tile .n{font-family:var(--disp);font-size:24px;font-weight:600;letter-spacing:-.02em;line-height:1}
+.tile .k{font-size:11px;color:var(--ink-2);text-transform:uppercase;letter-spacing:.05em;margin-top:5px}
+
+/* View tabs (All openings / My shortlist) */
+.viewtabs{display:flex;gap:6px;margin-bottom:14px;flex-wrap:wrap}
+.vtab{border:1px solid var(--line);background:var(--panel);color:var(--ink-2);border-radius:9px;
+  padding:8px 14px;font-size:13px;font-weight:600;cursor:pointer;font-family:var(--disp);
+  display:inline-flex;align-items:center;gap:7px}
+.vtab[aria-selected="true"]{background:var(--ink);color:var(--panel);border-color:var(--ink)}
+.vtab .vn{font-variant-numeric:tabular-nums;background:var(--accent);color:#fff;border-radius:999px;
+  font-size:11px;padding:0 6px;min-width:18px;text-align:center}
+.vtab[aria-selected="true"] .vn{background:var(--accent)}
+
+/* Data (import/export) bar */
+.databar{display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:14px;
+  background:var(--panel);border:1px dashed var(--line-2);border-radius:10px;padding:10px 12px}
+.databar .dlabel{font-size:11.5px;color:var(--ink-2);margin-right:auto}
+.btn{border:1px solid var(--line-2);background:var(--panel-2);color:var(--ink);border-radius:8px;
+  padding:7px 12px;font-size:12.5px;font-weight:600;cursor:pointer;font-family:var(--sans)}
+.btn:hover{border-color:var(--accent);color:var(--accent)}
+.btn.primary{background:var(--accent);border-color:var(--accent);color:#fff}
+.btn.primary:hover{opacity:.9;color:#fff}
+
+/* List */
+.listcard{background:var(--panel);border:1px solid var(--line);border-radius:12px;overflow:hidden}
+.listhead{display:flex;align-items:center;gap:10px;padding:12px 14px;border-bottom:1px solid var(--line);flex-wrap:wrap}
+.listhead h2{font-size:14px;font-weight:600}
+.count{font-family:var(--mono);font-size:12px;color:var(--ink-2)}
+.placebar{border:1px solid var(--accent);background:var(--accent-soft);color:var(--accent);
+  border-radius:999px;padding:4px 10px;font-size:12px;font-weight:600;cursor:pointer;
+  font-family:var(--sans);display:inline-flex;align-items:center;gap:6px}
+.placebar:hover{background:var(--accent);color:#fff}
+.placebar .x{font-size:14px;line-height:1;opacity:.8}
+.sortsel{margin-left:auto;display:flex;align-items:center;gap:6px}
+.sortsel label{font-size:11px;color:var(--ink-2);text-transform:uppercase;letter-spacing:.05em}
+.sortsel select{border:1px solid var(--line-2);background:var(--panel-2);color:var(--ink);border-radius:7px;padding:5px 8px;font-size:12.5px;font-family:var(--sans)}
+ul.jobs{list-style:none;margin:0;padding:0}
+li.job{padding:12px 14px 12px 42px;border-bottom:1px solid var(--line);display:grid;gap:5px;position:relative}
+li.job:last-child{border-bottom:none}
+li.job:hover{background:var(--panel-2)}
+/* star toggle */
+.star{position:absolute;left:12px;top:12px;width:22px;height:22px;border:none;background:none;
+  cursor:pointer;color:var(--line-2);font-size:18px;line-height:1;padding:0;transition:.12s}
+.star:hover{color:var(--star);transform:scale(1.15)}
+.star[aria-pressed="true"]{color:var(--star)}
+.jt{display:flex;gap:9px;align-items:flex-start}
+.jt .tier{width:4px;align-self:stretch;border-radius:3px;flex:none;min-height:18px}
+.jtitle{font-weight:600;font-size:14px;color:var(--ink);text-decoration:none;cursor:pointer}
+.jtitle:hover{text-decoration:underline;text-underline-offset:2px;color:var(--accent)}
+.jmeta{display:flex;gap:7px;flex-wrap:wrap;align-items:center;font-size:12.5px;color:var(--ink-2)}
+.jmeta .inst{color:var(--ink);font-weight:500}
+.sep{opacity:.4}
+.tags{display:flex;gap:5px;flex-wrap:wrap}
+.tag{font-size:10.5px;padding:2px 7px;border-radius:6px;background:var(--panel-2);
+  border:1px solid var(--line);color:var(--ink-2);font-weight:500}
+.tag.ai4{background:var(--accent-soft);border-color:var(--accent);color:var(--accent)}
+.badge{font-size:10px;font-weight:700;padding:2px 6px;border-radius:5px;color:#fff;letter-spacing:.02em}
+.badge.hbcu{background:var(--hbcu)}
+.src{font-size:10px;font-family:var(--mono);color:var(--ink-2);border:1px solid var(--line);
+  border-radius:5px;padding:1px 5px}
+/* personal tracking row */
+.track{display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-top:4px;
+  padding-top:8px;border-top:1px dashed var(--line)}
+.track label{font-size:10px;text-transform:uppercase;letter-spacing:.04em;color:var(--ink-2);font-weight:600}
+.track select,.track input[type=date]{border:1px solid var(--line-2);background:var(--panel-2);
+  color:var(--ink);border-radius:6px;padding:4px 7px;font-size:12px;font-family:var(--sans)}
+.track .status-pill{font-size:10px;font-weight:700;padding:2px 7px;border-radius:999px;color:#fff}
+.track input[type=text]{border:1px solid var(--line-2);background:var(--panel-2);color:var(--ink);
+  border-radius:6px;padding:4px 7px;font-size:12px;font-family:var(--sans);min-width:120px;flex:1}
+.deadline-flag{font-size:10.5px;font-weight:700;color:var(--warn);font-family:var(--mono)}
+.deadline-flag.soon{color:#fff;background:var(--warn);padding:1px 6px;border-radius:5px}
+.more{display:block;width:100%;text-align:center;padding:13px;background:var(--panel-2);
+  border:none;border-top:1px solid var(--line);color:var(--accent);font-weight:600;cursor:pointer;
+  font-family:var(--sans);font-size:13px}
+.more:hover{background:var(--accent-soft)}
+.empty{padding:40px 14px;text-align:center;color:var(--ink-2)}
+.loading{padding:40px 14px;text-align:center;color:var(--ink-2);font-family:var(--mono);font-size:13px}
+
+/* Tooltip */
+#tip{position:fixed;z-index:80;pointer-events:none;background:var(--ink);color:var(--panel);
+  padding:8px 10px;border-radius:8px;font-size:12px;max-width:240px;box-shadow:0 6px 24px rgba(0,0,0,.25);
+  opacity:0;transition:opacity .1s}
+#tip b{font-weight:600}#tip .ti2{opacity:.75;font-size:11px;margin-top:2px}
+.foot{color:var(--ink-2);font-size:11.5px;padding-block:20px;text-align:center;line-height:1.6}
+:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+@media(prefers-reduced-motion:reduce){*{transition:none!important}}
+</style>
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=Space+Grotesk:wght@500;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap">
+
+<header>
+  <div class="wrap hrow">
+    <h1>CS Faculty Job Atlas</h1>
+    <span class="sub"><b id="hStat">&mdash;</b> US faculty openings in CS, data science, and computer &amp; electrical engineering</span>
+    <span class="asof" id="asof"></span>
+  </div>
+</header>
+
+<div class="wrap">
+<div class="main">
+  <!-- Controls -->
+  <button class="filterToggle" id="filterToggle" aria-expanded="false" aria-controls="rail">
+    <span>Filters &amp; search</span>
+    <span class="fcount" id="fcount"></span>
+    <span class="chev" aria-hidden="true">&#9662;</span>
+  </button>
+  <aside class="rail" id="rail" data-collapsed="true">
+    <div class="card">
+      <div class="railhead"><h3>Search</h3><button class="reset" id="resetAll">Reset all</button></div>
+      <input class="search" id="q" type="search" placeholder="School, title, or city" autocomplete="off">
+    </div>
+    <div class="card">
+      <h3>Carnegie tier <span class="hint multi">pick any</span></h3>
+      <div class="chips" id="fTier"></div>
+    </div>
+    <div class="card">
+      <h3>School type <span class="hint multi">pick any</span></h3>
+      <div class="chips" id="fFlag"></div>
+    </div>
+    <div class="card">
+      <h3>Position type <span class="hint multi">pick any</span></h3>
+      <div class="chips" id="fType"></div>
+    </div>
+    <div class="card">
+      <h3>Research area <span class="hint multi">pick any</span></h3>
+      <div class="chips" id="fTag"></div>
+    </div>
+    <div class="card">
+      <label class="lbl" for="fState">State <span class="hint single">one only</span></label>
+      <select class="sel" id="fState"><option value="">All states</option></select>
+      <label class="lbl" for="fSrc" style="margin-top:12px">Source <span class="hint single">one only</span></label>
+      <select class="sel" id="fSrc">
+        <option value="">Both sources</option>
+        <option value="HEJ">HigherEdJobs</option>
+        <option value="CRA">CRA Job Board</option>
+      </select>
+    </div>
+  </aside>
+
+  <!-- Map + stats + list -->
+  <div class="mapwrap">
+    <div class="stats" id="stats"></div>
+
+    <div class="mapcard" style="margin-top:14px">
+      <div class="maptop">
+        <h2>Where the jobs are</h2>
+        <div class="legend">
+          <span><i style="background:var(--r1)"></i>R1</span>
+          <span><i style="background:var(--r2)"></i>R2</span>
+          <span><i style="background:var(--m)"></i>Master's</span>
+          <span><i style="background:var(--coll)"></i>College</span>
+          <span><i style="background:var(--cc)"></i>Comm. Coll.</span>
+          <span><i style="background:var(--oth)"></i>Other</span>
+        </div>
+      </div>
+      <svg id="map" viewBox="0 0 960 600" role="img" aria-label="Map of US faculty openings"></svg>
+      <div class="mapnote" id="mapnote">Tap a dot to see that city's openings below. Bigger dots hold more jobs.</div>
+    </div>
+
+    <!-- View switch + personal-data bar -->
+    <div class="viewtabs" style="margin-top:14px">
+      <button class="vtab" id="tabAll" role="tab" aria-selected="true">All openings</button>
+      <button class="vtab" id="tabMine" role="tab" aria-selected="false">My shortlist <span class="vn" id="mineN">0</span></button>
+    </div>
+    <div class="databar">
+      <span class="dlabel">Your stars, statuses and dates are saved in this browser. Export to keep them in your GitHub repo or move devices.</span>
+      <button class="btn" id="exportBtn">Export my data</button>
+      <button class="btn" id="importBtn">Import</button>
+      <input type="file" id="importFile" accept="application/json" hidden>
+    </div>
+
+    <div class="listcard">
+      <div class="listhead">
+        <h2 id="listTitle">Openings</h2>
+        <span class="count" id="listCount">&mdash;</span>
+        <button class="placebar" id="placebar" hidden></button>
+        <div class="sortsel">
+          <label for="sort">Sort</label>
+          <select id="sort">
+            <option value="tier">Research tier, R1 first</option>
+            <option value="deadline">Deadline soonest</option>
+            <option value="state">By state</option>
+            <option value="school">By school</option>
+          </select>
+        </div>
+      </div>
+      <ul class="jobs" id="list"><li class="loading">Loading openings</li></ul>
+      <button class="more" id="more" hidden>Show more</button>
+    </div>
+
+    <p class="foot" id="foot"></p>
+  </div>
+</div>
+</div>
+<div id="tip" aria-hidden="true"></div>
+
+<script>
+const TIER={R1:{c:'var(--r1)',k:'R1'},R2:{c:'var(--r2)',k:'R2'},
+  'Other 4-yr':{c:'var(--m)',k:"Master's/4-yr"},'College/Other':{c:'var(--coll)',k:'College'},
+  'Community College':{c:'var(--cc)',k:'Comm. Coll.'},'Other':{c:'var(--oth)',k:'Other'}};
+function tierColor(cn){return (TIER[cn]||TIER.Other).c}
+function tierKey(cn){return cn==='Other 4-yr'?"Master's/4-yr":(cn==='College/Other'?'College':cn==='Community College'?'Comm. Coll.':cn||'Other')}
+const TAG_ORDER=['AI4Science','AI/ML','Robotics','Vision','NLP','Bio/Health','Quantum','Systems/Hardware','Security/Cyber','HCI','Theory','CS-Ed','General/Other'];
+const esc=s=>(s==null?'':String(s)).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+
+// Personal-tracking status options (your workflow states)
+const STATUS=[['','Not started','var(--ink-2)'],['interested','Interested','var(--m)'],
+  ['applied','Applied','var(--accent)'],['interview','Interview','var(--r2)'],
+  ['offer','Offer','var(--good)'],['rejected','Rejected','var(--oth)'],['skip','Skip','var(--oth)']];
+const STATUS_COLOR=Object.fromEntries(STATUS.map(s=>[s[0],s[2]]));
+
+let DATA=null, F={q:'',tier:new Set(),type:new Set(),tag:new Set(),flag:new Set(),state:'',src:'',place:null,sort:'tier'};
+let shown=40, VIEW='all';
+// MINE: {jobId: {star:bool, status:'', applied:'YYYY-MM-DD', deadline:'', note:''}}
+let MINE=loadMine();
+
+function jobId(j){return j.u||(j.i+'|'+j.t)}  // stable key per job
+function loadMine(){try{return JSON.parse(localStorage.getItem('csjobs_mine')||'{}')}catch(e){return {}}}
+function saveMine(){try{localStorage.setItem('csjobs_mine',JSON.stringify(MINE))}catch(e){}}
+function rec(id){return MINE[id]||(MINE[id]={star:false,status:'',applied:'',deadline:'',note:''})}
+
+// ---- equirectangular projection tuned to US bbox -> 960x600 viewBox ----
+function project(lat,lng){
+  const x0=-125, x1=-66, y0=24, y1=49.5;
+  let x=(lng-x0)/(x1-x0)*900+30;
+  let y=(1-(lat-y0)/(y1-y0))*520+40;
+  return [x,y];
+}
+
+fetch('data.json').then(r=>r.json()).then(d=>{DATA=d; boot();}).catch(e=>{
+  document.getElementById('list').innerHTML='<li class="empty">Could not load job data.</li>';
+});
+
+function boot(){
+  const m=DATA.meta;
+  document.getElementById('asof').textContent='Data as of '+m.generated;
+  document.getElementById('hStat').textContent=DATA.jobs.length.toLocaleString();
+  buildChips(); buildStateOptions(); bindEvents(); updateMineCount(); render();
+  const hb=m.hbcu_count!=null?` ${m.hbcu_count} openings are at HBCUs.`:'';
+  document.getElementById('foot').innerHTML=
+    'Sources: '+m.sources.map(esc).join(', ')+'. '+esc(m.note_ajo)+
+    ' R1 and R2 tiers come from the official 2025 Carnegie Research Activity Designation (ACE and Indiana University; 187 R1, 139 R2).'+
+    ' HBCU status comes from the U.S. Dept. of Education roster.'+hb+
+    ' Research-direction tags are read from each posting title, so they can miss or mislabel a job. '+
+    (m.intl_count||0)+' international postings are left off the US map.';
+}
+
+function buildChips(){
+  const tiers=['R1','R2','Other 4-yr','College/Other','Community College','Other'];
+  document.getElementById('fTier').innerHTML=tiers.map(t=>{
+    const n=DATA.jobs.filter(j=>j.cn===t).length;
+    return `<button class="chip tier" role="button" aria-pressed="false" data-f="tier" data-v="${esc(t)}" style="--cc:${tierColor(t)}"><span class="dot" style="background:${tierColor(t)}"></span>${esc(tierKey(t))}<span class="ct">${n}</span></button>`;
+  }).join('');
+  // School-type flag chips (HBCU is the one flag for now; independent dimension)
+  const hbN=DATA.jobs.filter(j=>j.hb).length;
+  document.getElementById('fFlag').innerHTML=
+    `<button class="chip hbcu" role="button" aria-pressed="false" data-f="flag" data-v="hbcu"><span class="dot" style="background:var(--hbcu)"></span>HBCU<span class="ct">${hbN}</span></button>`;
+  const types=[...new Set(DATA.jobs.map(j=>j.jt))].sort((a,b)=>DATA.jobs.filter(j=>j.jt===b).length-DATA.jobs.filter(j=>j.jt===a).length);
+  document.getElementById('fType').innerHTML=types.map(t=>{
+    const n=DATA.jobs.filter(j=>j.jt===t).length;
+    return `<button class="chip" role="button" aria-pressed="false" data-f="type" data-v="${esc(t)}">${esc(t)}<span class="ct">${n}</span></button>`;
+  }).join('');
+  const tags=TAG_ORDER.filter(t=>DATA.jobs.some(j=>j.tg.includes(t)));
+  document.getElementById('fTag').innerHTML=tags.map(t=>{
+    const n=DATA.jobs.filter(j=>j.tg.includes(t)).length;
+    return `<button class="chip" role="button" aria-pressed="false" data-f="tag" data-v="${esc(t)}">${esc(t)}<span class="ct">${n}</span></button>`;
+  }).join('');
+}
+function buildStateOptions(){
+  const st=[...new Set(DATA.jobs.map(j=>j.s))].sort();
+  const sel=document.getElementById('fState');
+  st.forEach(s=>{const o=document.createElement('option');o.value=s;
+    o.textContent=s+' ('+DATA.jobs.filter(j=>j.s===s).length+')';sel.appendChild(o)});
+}
+
+function passExcept(j,skip){
+  if(VIEW==='mine'){const r=MINE[jobId(j)];if(!r||!r.star)return false;}
+  if(skip!=='q'&&F.q){const h=(j.t+' '+j.i+' '+(j.c||'')+' '+j.s).toLowerCase();if(!h.includes(F.q))return false;}
+  if(skip!=='place'&&F.place){if((j.c||'')!==F.place.c||j.s!==F.place.s)return false;}
+  if(skip!=='tier'&&F.tier.size&&!F.tier.has(j.cn))return false;
+  if(skip!=='flag'&&F.flag.size){if(F.flag.has('hbcu')&&!j.hb)return false;}
+  if(skip!=='type'&&F.type.size&&!F.type.has(j.jt))return false;
+  if(skip!=='tag'&&F.tag.size&&![...F.tag].some(t=>j.tg.includes(t)))return false;
+  if(skip!=='state'&&F.state&&j.s!==F.state)return false;
+  if(skip!=='src'&&F.src&&j.src!==F.src)return false;
+  return true;
+}
+const pass=j=>passExcept(j,null);
+function filtered(){return DATA.jobs.filter(pass)}
+
+function drawStats(){
+  const js=filtered();
+  const r1=js.filter(j=>j.cn==='R1').length;
+  const r2=js.filter(j=>j.cn==='R2').length;
+  const tt=js.filter(j=>j.jt==='Tenure-track/Tenured').length;
+  const hb=js.filter(j=>j.hb).length;
+  const tiles=[['Total openings',js.length],['Tenure-track',tt],['R1',r1],
+    VIEW==='mine'?['Starred',js.length]:['HBCU',hb]];
+  document.getElementById('stats').innerHTML=tiles.map(([k,n])=>
+    `<div class="tile"><div class="n tnum">${n.toLocaleString()}</div><div class="k">${k}</div></div>`).join('');
+}
+
+function drawMap(){
+  const svg=document.getElementById('map');
+  const js=filtered().filter(j=>j.lat&&j.lng);
+  const cl={};
+  js.forEach(j=>{const k=j.lat.toFixed(1)+','+j.lng.toFixed(1);(cl[k]=cl[k]||{lat:j.lat,lng:j.lng,items:[]}).items.push(j)});
+  const nodes=Object.values(cl);
+  let s='';
+  if(DATA.states_path)
+    s+=`<path d="${DATA.states_path}" fill="var(--map-land)" stroke="var(--map-edge)" stroke-width=".7" stroke-linejoin="round" stroke-linecap="round"/>`;
+  s+=`<text x="34" y="590" font-family="var(--mono)" font-size="11" fill="var(--ink-2)" opacity=".65">${js.length} located openings across ${nodes.length} cities</text>`;
+  nodes.sort((a,b)=>a.items.length-b.items.length);
+  nodes.forEach(n=>{
+    const [x,y]=project(n.lat,n.lng);
+    const cnt=n.items.length;
+    const rr=Math.min(22,3.2+Math.sqrt(cnt)*2.6);
+    const tc={};n.items.forEach(j=>tc[j.cn]=(tc[j.cn]||0)+1);
+    const dom=Object.entries(tc).sort((a,b)=>b[1]-a[1])[0][0];
+    const city=n.items[0].c||'', st=n.items[0].s;
+    const lab=esc(city+', '+st)+' &middot; '+cnt+' opening'+(cnt>1?'s':'');
+    s+=`<circle cx="${x.toFixed(1)}" cy="${y.toFixed(1)}" r="${rr.toFixed(1)}" fill="${tierColor(dom)}" fill-opacity=".72" stroke="var(--panel)" stroke-width="1" class="mdot" tabindex="0" role="button" data-city="${esc(city)}" data-st="${esc(st)}" data-lab="${lab}" style="cursor:pointer"/>`;
+    if(cnt>=8) s+=`<text x="${x.toFixed(1)}" y="${(y+3.5).toFixed(1)}" text-anchor="middle" font-size="${cnt>=25?11:10}" font-weight="700" fill="#fff" pointer-events="none" font-family="var(--disp)">${cnt}</text>`;
+  });
+  svg.innerHTML=s;
+  svg.querySelectorAll('.mdot').forEach(c=>{
+    c.addEventListener('mousemove',e=>showTip(e,c.dataset.lab));
+    c.addEventListener('mouseleave',hideTip);
+    c.addEventListener('click',()=>{
+      F.place={c:c.dataset.city, s:c.dataset.st}; shown=40; render(); updatePlaceBar(); hideTip();
+      document.querySelector('.listcard').scrollIntoView({behavior:'smooth',block:'start'});
+    });
+    c.addEventListener('focus',e=>{const r=c.getBoundingClientRect();showTipAt(r.left+r.width/2,r.top,c.dataset.lab)});
+    c.addEventListener('blur',hideTip);
+  });
+}
+function updatePlaceBar(){
+  const pb=document.getElementById('placebar');
+  if(F.place){pb.hidden=false;pb.innerHTML=esc(F.place.c+', '+F.place.s)+' <span class="x" aria-hidden="true">&times;</span>';pb.setAttribute('aria-label','Clear city filter: '+F.place.c+', '+F.place.s);}
+  else pb.hidden=true;
+}
+const tip=document.getElementById('tip');
+function showTip(e,txt){showTipAt(e.clientX,e.clientY,txt)}
+function showTipAt(x,y,txt){tip.innerHTML='<b>'+txt+'</b>';tip.style.left=Math.min(x+12,innerWidth-220)+'px';
+  tip.style.top=Math.max(y-40,8)+'px';tip.style.opacity='1'}
+function hideTip(){tip.style.opacity='0'}
+
+function daysUntil(d){if(!d)return null;const t=new Date(d+'T00:00:00'),now=new Date();now.setHours(0,0,0,0);return Math.round((t-now)/864e5)}
+function sortJobs(js){
+  const tierRank={R1:0,R2:1,'Other 4-yr':2,'College/Other':3,'Community College':4,'Other':5};
+  if(F.sort==='tier')js.sort((a,b)=>(tierRank[a.cn]-tierRank[b.cn])||a.i.localeCompare(b.i));
+  else if(F.sort==='deadline')js.sort((a,b)=>{
+    const da=(MINE[jobId(a)]||{}).deadline||'9999', db=(MINE[jobId(b)]||{}).deadline||'9999';
+    return da.localeCompare(db);});
+  else if(F.sort==='state')js.sort((a,b)=>a.s.localeCompare(b.s)||a.i.localeCompare(b.i));
+  else if(F.sort==='school')js.sort((a,b)=>a.i.localeCompare(b.i));
+  return js;
+}
+function statusOptions(cur){return STATUS.map(s=>`<option value="${s[0]}" ${s[0]===cur?'selected':''}>${s[1]}</option>`).join('')}
+
+function render(){
+  if(!DATA)return;
+  updateFilterToggle();
+  drawStats(); drawMap();
+  const js=sortJobs(filtered());
+  document.getElementById('listCount').textContent=js.length.toLocaleString()+' match'+(js.length===1?'':'es');
+  document.getElementById('listTitle').textContent=VIEW==='mine'?'My shortlist':'Openings';
+  const ul=document.getElementById('list');
+  if(!js.length){
+    ul.innerHTML='<li class="empty">'+(VIEW==='mine'
+      ?'No starred jobs yet. Tap the star on any opening to add it here.'
+      :'Nothing matches these filters yet. Clear one to widen the search.')+'</li>';
+    document.getElementById('more').hidden=true;return;}
+  const slice=js.slice(0,shown);
+  ul.innerHTML=slice.map(j=>{
+    const id=jobId(j), r=MINE[id]||{};
+    const tags=j.tg.map(t=>`<span class="tag">${esc(t)}</span>`).join('');
+    const tc=tierColor(j.cn);
+    const hbBadge=j.hb?`<span class="badge hbcu">HBCU</span>`:'';
+    const dd=daysUntil(r.deadline);
+    let ddFlag='';
+    if(dd!=null){ddFlag=dd<0?`<span class="deadline-flag">closed ${-dd}d ago</span>`
+      :dd<=14?`<span class="deadline-flag soon">${dd}d left</span>`
+      :`<span class="deadline-flag">${dd}d left</span>`;}
+    return `<li class="job" data-id="${esc(id)}" data-url="${esc(j.u)}">
+      <button class="star" aria-pressed="${r.star?'true':'false'}" data-act="star" title="Shortlist">${r.star?'&#9733;':'&#9734;'}</button>
+      <div class="jt"><span class="tier" style="background:${tc}"></span>
+        <a class="jtitle" href="${esc(j.u)}" target="_blank" rel="noopener">${esc(j.t)}</a></div>
+      <div class="jmeta">
+        <span class="inst">${esc(j.i)}</span><span class="sep">&middot;</span>
+        <span>${esc((j.c?j.c+', ':'')+j.s)}</span><span class="sep">&middot;</span>
+        <span class="badge" style="background:${tc}">${esc(tierKey(j.cn))}</span>
+        ${hbBadge}
+        <span>${esc(j.jt)}</span>
+        <span class="src">${esc(j.src)}</span>
+        ${ddFlag}
+      </div>
+      <div class="tags">${tags}</div>
+      <div class="track">
+        <label>Status</label>
+        <select data-act="status" style="border-left:3px solid ${STATUS_COLOR[r.status||'']||'var(--line-2)'}">${statusOptions(r.status||'')}</select>
+        <label>Applied</label><input type="date" data-act="applied" value="${esc(r.applied||'')}">
+        <label>Deadline</label><input type="date" data-act="deadline" value="${esc(r.deadline||'')}">
+        <input type="text" data-act="note" placeholder="Note (contact, fit, next step)" value="${esc(r.note||'')}">
+      </div>
+    </li>`;
+  }).join('');
+  const more=document.getElementById('more');
+  if(js.length>shown){more.hidden=false;more.textContent=`Show more (${(js.length-shown).toLocaleString()} more)`;}
+  else more.hidden=true;
+}
+
+function syncChips(){
+  document.querySelectorAll('.chip[data-f]').forEach(c=>{
+    const f=c.dataset.f;
+    const set=F[f]; if(!set||!set.has)return;
+    const on=set.has(c.dataset.v);
+    c.setAttribute('aria-pressed', on?'true':'false');
+    if(f==='tier'){
+      c.style.background=on?c.style.getPropertyValue('--cc'):'';
+      c.style.borderColor=on?c.style.getPropertyValue('--cc'):'';
+    }
+  });
+}
+function activeFilterCount(){
+  return F.tier.size+F.type.size+F.tag.size+F.flag.size+(F.state?1:0)+(F.src?1:0)+(F.q?1:0)+(F.place?1:0);
+}
+function updateFilterToggle(){
+  const el=document.getElementById('fcount');
+  if(el){const n=activeFilterCount();el.textContent=n?n+' active':'';}
+}
+function updateMineCount(){
+  const n=Object.values(MINE).filter(r=>r.star).length;
+  document.getElementById('mineN').textContent=n;
+}
+
+function bindEvents(){
+  const ft=document.getElementById('filterToggle');
+  ft.addEventListener('click',()=>{
+    const rail=document.getElementById('rail');
+    const open=rail.getAttribute('data-collapsed')==='true';
+    rail.setAttribute('data-collapsed',open?'false':'true');
+    ft.setAttribute('aria-expanded',open?'true':'false');
+  });
+  document.getElementById('q').addEventListener('input',e=>{F.q=e.target.value.trim().toLowerCase();if(F.q)F.place=null;shown=40;updatePlaceBar();render()});
+  document.querySelectorAll('.chip[data-f]').forEach(c=>c.addEventListener('click',()=>{
+    const f=c.dataset.f, v=c.dataset.v, set=F[f];
+    set.has(v)?set.delete(v):set.add(v);
+    shown=40;syncChips();render();
+  }));
+  document.getElementById('fState').addEventListener('change',e=>{F.state=e.target.value;if(F.state)F.place=null;shown=40;updatePlaceBar();render()});
+  document.getElementById('fSrc').addEventListener('change',e=>{F.src=e.target.value;shown=40;render()});
+  document.getElementById('sort').addEventListener('change',e=>{F.sort=e.target.value;render()});
+
+  // view tabs
+  document.getElementById('tabAll').addEventListener('click',()=>switchView('all'));
+  document.getElementById('tabMine').addEventListener('click',()=>switchView('mine'));
+
+  // list interactions (delegated): star, status, dates, note, open link
+  const list=document.getElementById('list');
+  list.addEventListener('click',e=>{
+    const star=e.target.closest('[data-act="star"]');
+    if(star){const li=star.closest('li.job');const id=li.dataset.id;const r=rec(id);
+      r.star=!r.star;saveMine();updateMineCount();
+      star.setAttribute('aria-pressed',r.star?'true':'false');
+      star.innerHTML=r.star?'&#9733;':'&#9734;';
+      if(VIEW==='mine'&&!r.star)render(); // drop from shortlist view
+      return;}
+    if(e.target.closest('a'))return;
+    if(e.target.closest('.track'))return; // don't open link when editing fields
+    const li=e.target.closest('li.job'); if(li&&li.dataset.url&&!e.target.closest('button,select,input'))window.open(li.dataset.url,'_blank','noopener');
+  });
+  // field edits
+  list.addEventListener('change',e=>{
+    const el=e.target, act=el.dataset.act; if(!act)return;
+    const li=el.closest('li.job'); const id=li.dataset.id; const r=rec(id);
+    if(act==='status'){r.status=el.value;el.style.borderLeft='3px solid '+(STATUS_COLOR[el.value]||'var(--line-2)');}
+    else if(act==='applied')r.applied=el.value;
+    else if(act==='deadline'){r.deadline=el.value; if(F.sort==='deadline')render();}
+    saveMine();
+  });
+  list.addEventListener('input',e=>{
+    const el=e.target; if(el.dataset.act!=='note')return;
+    const id=el.closest('li.job').dataset.id; rec(id).note=el.value; saveMine();
+  });
+
+  document.getElementById('more').addEventListener('click',()=>{shown+=60;render()});
+  document.getElementById('placebar').addEventListener('click',()=>{F.place=null;shown=40;render();updatePlaceBar();});
+  document.getElementById('resetAll').addEventListener('click',()=>{
+    F={q:'',tier:new Set(),type:new Set(),tag:new Set(),flag:new Set(),state:'',src:'',place:null,sort:F.sort};
+    document.getElementById('q').value='';document.getElementById('fState').value='';
+    document.getElementById('fSrc').value='';shown=40;syncChips();render();updatePlaceBar();
+  });
+
+  // export / import personal data
+  document.getElementById('exportBtn').addEventListener('click',exportMine);
+  document.getElementById('importBtn').addEventListener('click',()=>document.getElementById('importFile').click());
+  document.getElementById('importFile').addEventListener('change',importMine);
+}
+
+function switchView(v){
+  VIEW=v;shown=40;
+  document.getElementById('tabAll').setAttribute('aria-selected',v==='all');
+  document.getElementById('tabMine').setAttribute('aria-selected',v==='mine');
+  render();
+}
+
+function exportMine(){
+  // keep only non-empty records; attach a little context for each
+  const out={};
+  for(const [id,r] of Object.entries(MINE)){
+    if(r.star||r.status||r.applied||r.deadline||r.note){
+      const j=DATA.jobs.find(x=>jobId(x)===id);
+      out[id]={...r, _title:j?j.t:'', _inst:j?j.i:''};
+    }
+  }
+  const blob=JSON.stringify({exported:new Date().toISOString().slice(0,10),records:out},null,2);
+  const name='my_applications.json';
+  // Try a real file download (works on GitHub Pages); the artifact preview
+  // sandbox blocks it, so also copy to clipboard and show a textarea fallback.
+  let downloaded=false;
+  try{
+    const a=document.createElement('a');
+    a.href=URL.createObjectURL(new Blob([blob],{type:'application/json'}));
+    a.download=name; document.body.appendChild(a); a.click(); a.remove(); downloaded=true;
+  }catch(e){}
+  if(navigator.clipboard&&navigator.clipboard.writeText){
+    navigator.clipboard.writeText(blob).then(
+      ()=>flash(downloaded?'Downloaded my_applications.json (also copied to clipboard).'
+        :'Copied your data to the clipboard. Paste it into my_applications.json in your repo.'),
+      ()=>showExportFallback(blob));
+  }else{showExportFallback(blob);}
+}
+function importMine(e){
+  const f=e.target.files[0]; if(!f)return;
+  const rd=new FileReader();
+  rd.onload=()=>{try{
+    const d=JSON.parse(rd.result); const recs=d.records||d;
+    for(const [id,r] of Object.entries(recs)){
+      MINE[id]={star:!!r.star,status:r.status||'',applied:r.applied||'',deadline:r.deadline||'',note:r.note||''};
+    }
+    saveMine();updateMineCount();render();
+    flash('Imported '+Object.keys(recs).length+' saved jobs.');
+  }catch(err){flash('That file could not be read as saved data.')}};
+  rd.readAsText(f); e.target.value='';
+}
+function flash(msg){
+  const b=document.querySelector('.databar .dlabel');
+  const old=b.textContent; b.textContent=msg; b.style.color='var(--good)';
+  setTimeout(()=>{b.textContent=old;b.style.color='';},4000);
+}
+function showExportFallback(blob){
+  const b=document.querySelector('.databar .dlabel');
+  b.innerHTML='Copy this text into <b>my_applications.json</b>:';
+  const ta=document.createElement('textarea');ta.value=blob;ta.style.cssText='width:100%;height:80px;margin-top:6px;font-family:var(--mono);font-size:11px';
+  document.querySelector('.databar').appendChild(ta);ta.select();
+}
+</script>
