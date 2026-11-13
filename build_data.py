@@ -89,11 +89,14 @@ def scrape_higheredjobs():
             rows = soup.select("div.row.record")
             if not rows:
                 break
-            # Stop this category when a page repeats codes we've already seen
-            # (HigherEdJobs loops back to page 1 past the real last page).
+            # Codes on this page; used both to dedupe and to detect the
+            # end-of-list page-loop (HigherEdJobs wraps back to page 1).
             page_codes = [re.search(r"JobCode=(\d+)", row.select_one("a[href*='details.cfm']")["href"]).group(1)
                           for row in rows if row.select_one("a[href*='details.cfm']")]
-            if page_codes and all(c in seen_codes for c in page_codes):
+            new_on_page = [c for c in page_codes if c not in seen_codes]
+            # Stop only when this page adds NOTHING new within this category's
+            # own run (not merely overlapping another category).
+            if page > 1 and not new_on_page:
                 break
             added = 0
             for row in rows:
@@ -106,8 +109,11 @@ def scrape_higheredjobs():
                 title = a.get_text(" ", strip=True)
                 href = a.get("href", "")
                 mcode = re.search(r"JobCode=(\d+)", href)
-                if mcode:
-                    seen_codes.add(mcode.group(1))
+                code = mcode.group(1) if mcode else None
+                if code and code in seen_codes:
+                    continue                      # already collected under another category
+                if code:
+                    seen_codes.add(code)
                 if href and not href.startswith("http"):
                     href = "https://www.higheredjobs.com/faculty/" + href.lstrip("/")
                 # lines after the title link: [institution, "City, ST"]
