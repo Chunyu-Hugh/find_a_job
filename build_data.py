@@ -50,42 +50,66 @@ def get(url, **kw):
 HEJ_CATS = {102: "Computer Science", 290: "Data Science",
             116: "Computer Engineering", 117: "Electrical Engineering"}
 
+def _hej_textnodes(col):
+    """Return the non-empty text lines inside a col-sm-7 block, split on <br>.
+    Layout is:  <a>title</a> <br> institution <br> 'City, ST'."""
+    from bs4 import NavigableString
+    lines, cur = [], ""
+    for node in col.children:
+        if getattr(node, "name", None) == "br":
+            if cur.strip():
+                lines.append(cur.strip())
+            cur = ""
+        elif getattr(node, "name", None) == "a":
+            # the title link; keep as its own line
+            if cur.strip():
+                lines.append(cur.strip())
+            lines.append(node.get_text(" ", strip=True))
+            cur = ""
+        elif isinstance(node, NavigableString):
+            cur += " " + str(node)
+        else:
+            cur += " " + node.get_text(" ", strip=True)
+    if cur.strip():
+        lines.append(cur.strip())
+    return [l for l in lines if l]
+
 def scrape_higheredjobs():
     jobs = []
     for cat, label in HEJ_CATS.items():
         page = 1
-        seen_here = 0
         while True:
-            url = (f"https://www.higheredjobs.com/faculty/search.cfm"
-                   f"?JobCat={cat}&StartRow={(page-1)*25+1}&SortBy=1&NumJobs=25&filterID=102")
+            url = (f"https://www.higheredjobs.com/search/advanced_action.cfm"
+                   f"?JobCat={cat}&StartRow={(page-1)*25+1}&NumJobs=25&SortBy=1&filterID=102")
             r = get(url)
             if not r:
                 break
             soup = BeautifulSoup(r.text, "html.parser")
-            rows = soup.select("div.row.record") or soup.select("div.js-rowlink")
+            rows = soup.select("div.row.record")
             if not rows:
                 break
+            added = 0
             for row in rows:
-                a = row.select_one("a[href*='details.cfm'], a.jobTitle, a")
+                col = row.select_one("div.col-sm-7")
+                if not col:
+                    continue
+                a = col.select_one("a[href*='details.cfm']")
                 if not a:
                     continue
-                title = a.get_text(strip=True)
+                title = a.get_text(" ", strip=True)
                 href = a.get("href", "")
                 if href and not href.startswith("http"):
-                    href = "https://www.higheredjobs.com/faculty/" + href.lstrip("/")
-                # institution + location live in sibling cells
-                inst, loc = "", ""
-                cells = row.select("div.col-md-3, div.col-6, span.text-muted")
-                texts = [c.get_text(" ", strip=True) for c in cells if c.get_text(strip=True)]
-                if texts:
-                    inst = texts[0]
-                    for t in texts[1:]:
-                        if "," in t and len(t) < 40:   # "City, ST"
-                            loc = t; break
+                    href = "https://www.higheredjobs.com/search/" + href.lstrip("/")
+                # lines after the title link: [institution, "City, ST"]
+                lines = _hej_textnodes(col)
+                # drop the title line itself
+                lines = [l for l in lines if l != title]
+                inst = lines[0] if lines else ""
+                loc = lines[1] if len(lines) > 1 else ""
                 jobs.append({"t": title, "i": inst, "loc": loc, "u": href,
                              "src": "HEJ", "cat": label, "p": ""})
-                seen_here += 1
-            print(f"  HEJ {label}: page {page}, +{len(rows)}")
+                added += 1
+            print(f"  HEJ {label}: page {page}, +{added}")
             if len(rows) < 25:
                 break
             page += 1
@@ -105,28 +129,31 @@ def scrape_cra():
         if not r:
             break
         soup = BeautifulSoup(r.text, "html.parser")
-        cards = soup.select("div.job-listing, li.job-result, div.bti-ui-job-result-title")
+        cards = soup.select("li.search-item")
         if not cards:
             break
+        added = 0
         for c in cards:
-            a = c.select_one("a[href*='/job/'], a.job-title, a")
+            a = c.select_one("h2 a[href*='/job/'], a[data-testid='jobs-list-item-link']")
             if not a:
                 continue
-            title = a.get_text(strip=True)
+            title = a.get_text(" ", strip=True)
             href = a.get("href", "")
             if href and not href.startswith("http"):
                 href = "https://careercenter.cra.org" + href
-            locs = c.select(".location .small, .job-location, span.location")
-            inst = locs[0].get_text(strip=True) if locs else ""
-            loc = locs[1].get_text(strip=True) if len(locs) > 1 else ""
+            # institution + location are the two div.small inside div.location
+            smalls = c.select("div.location div.small")
+            inst = smalls[0].get_text(" ", strip=True) if smalls else ""
+            loc = smalls[1].get_text(" ", strip=True) if len(smalls) > 1 else ""
             if not inst:
                 logo = c.select_one("img[alt]")
                 if logo:
                     inst = logo.get("alt", "").replace(" logo", "").strip()
             jobs.append({"t": title, "i": inst, "loc": loc, "u": href,
                          "src": "CRA", "cat": "Computer Science", "p": ""})
-        print(f"  CRA: page {page}, +{len(cards)}")
-        if len(cards) < 10:
+            added += 1
+        print(f"  CRA: page {page}, +{added}")
+        if added == 0 or len(cards) < 10:
             break
         page += 1
         if page > 60:
@@ -232,11 +259,39 @@ def geocode(jobs, idx):
     return hits
 
 # ---------------------------------------------------------------- dedupe
+STATE_NAMES = {
+ "alabama":"AL","alaska":"AK","arizona":"AZ","arkansas":"AR","california":"CA",
+ "colorado":"CO","connecticut":"CT","delaware":"DE","florida":"FL","georgia":"GA",
+ "hawaii":"HI","idaho":"ID","illinois":"IL","indiana":"IN","iowa":"IA","kansas":"KS",
+ "kentucky":"KY","louisiana":"LA","maine":"ME","maryland":"MD","massachusetts":"MA",
+ "michigan":"MI","minnesota":"MN","mississippi":"MS","missouri":"MO","montana":"MT",
+ "nebraska":"NE","nevada":"NV","new hampshire":"NH","new jersey":"NJ","new mexico":"NM",
+ "new york":"NY","north carolina":"NC","north dakota":"ND","ohio":"OH","oklahoma":"OK",
+ "oregon":"OR","pennsylvania":"PA","rhode island":"RI","south carolina":"SC",
+ "south dakota":"SD","tennessee":"TN","texas":"TX","utah":"UT","vermont":"VT",
+ "virginia":"VA","washington":"WA","west virginia":"WV","wisconsin":"WI","wyoming":"WY",
+ "district of columbia":"DC","washington dc":"DC","puerto rico":"PR"}
 def split_loc(loc):
-    if "," in loc:
-        a, b = loc.rsplit(",", 1)
-        return a.strip(), b.strip()[:2].upper()
-    return loc.strip(), ""
+    """Return (city, 2-letter-state). Handles 'City, ST', 'City, State Name',
+    and a trailing country. Non-US -> empty state (filtered out later)."""
+    loc = re.sub(r"\s+", " ", (loc or "").strip())
+    if "," not in loc:
+        return loc, ""
+    parts = [p.strip() for p in loc.split(",")]
+    city = parts[0]
+    tail = parts[-1]
+    low = tail.lower()
+    if low in STATE_NAMES:
+        return city, STATE_NAMES[low]
+    up = tail[:2].upper()
+    # second-to-last may be the state when last is a country ("City, ST, USA")
+    if len(parts) >= 3:
+        mid = parts[-2].lower()
+        if mid in STATE_NAMES:
+            return city, STATE_NAMES[mid]
+        if re.fullmatch(r"[A-Za-z]{2}", parts[-2]):
+            up = parts[-2][:2].upper()
+    return city, up
 
 STOP = re.compile(r"\b(faculty|position|positions|open rank|tenure|track|assistant|associate|professor|of|in|the|and|department|for)\b")
 def title_key(t):
@@ -272,7 +327,11 @@ def main():
         j["cn"] = carnegie_tier(j["i"])
         j["hb"] = is_hbcu(j["i"])            # NEW: HBCU flag
 
-    us = [j for j in raw if re.fullmatch(r"[A-Z]{2}", j.get("s", ""))]
+    US_STATES = {"AL","AK","AZ","AR","CA","CO","CT","DE","FL","GA","HI","ID","IL",
+        "IN","IA","KS","KY","LA","ME","MD","MA","MI","MN","MS","MO","MT","NE","NV",
+        "NH","NJ","NM","NY","NC","ND","OH","OK","OR","PA","RI","SC","SD","TN","TX",
+        "UT","VT","VA","WA","WV","WI","WY","DC","PR","VI","GU"}
+    us = [j for j in raw if j.get("s", "") in US_STATES]
     intl = len(raw) - len(us)
     us = dedupe(us)
 
