@@ -76,17 +76,24 @@ def _hej_textnodes(col):
 
 def scrape_higheredjobs():
     jobs = []
+    seen_codes = set()
     for cat, label in HEJ_CATS.items():
         page = 1
         while True:
-            url = (f"https://www.higheredjobs.com/search/advanced_action.cfm"
-                   f"?JobCat={cat}&StartRow={(page-1)*25+1}&NumJobs=25&SortBy=1&filterID=102")
+            url = (f"https://www.higheredjobs.com/faculty/search.cfm"
+                   f"?JobCat={cat}&StartRow={(page-1)*25+1}&NumJobs=25&SortBy=1")
             r = get(url)
             if not r:
                 break
             soup = BeautifulSoup(r.text, "html.parser")
             rows = soup.select("div.row.record")
             if not rows:
+                break
+            # Stop this category when a page repeats codes we've already seen
+            # (HigherEdJobs loops back to page 1 past the real last page).
+            page_codes = [re.search(r"JobCode=(\d+)", row.select_one("a[href*='details.cfm']")["href"]).group(1)
+                          for row in rows if row.select_one("a[href*='details.cfm']")]
+            if page_codes and all(c in seen_codes for c in page_codes):
                 break
             added = 0
             for row in rows:
@@ -98,8 +105,11 @@ def scrape_higheredjobs():
                     continue
                 title = a.get_text(" ", strip=True)
                 href = a.get("href", "")
+                mcode = re.search(r"JobCode=(\d+)", href)
+                if mcode:
+                    seen_codes.add(mcode.group(1))
                 if href and not href.startswith("http"):
-                    href = "https://www.higheredjobs.com/search/" + href.lstrip("/")
+                    href = "https://www.higheredjobs.com/faculty/" + href.lstrip("/")
                 # lines after the title link: [institution, "City, ST"]
                 lines = _hej_textnodes(col)
                 # drop the title line itself
