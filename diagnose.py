@@ -37,7 +37,22 @@ def probe(name, url):
 
 probe("HigherEdJobs CS (102)",
       "https://www.higheredjobs.com/faculty/search.cfm?JobCat=102")
-probe("HigherEdJobs search_action",
-      "https://www.higheredjobs.com/search/advanced_action.cfm?JobCat=102&PosType=1")
 probe("CRA Job Board",
       "https://careercenter.cra.org/jobs/")
+
+# Dump one full record from each so we can see where institution + location live.
+def dump_one(name, url, row_sel):
+    print(f"\n{'#'*70}\nFULL RECORD: {name}  (selector {row_sel})\n{'#'*70}")
+    try:
+        r = requests.get(url, headers=UA, timeout=30)
+        soup = BeautifulSoup(r.text, "html.parser")
+        row = soup.select_one(row_sel)
+        if row:
+            print(row.prettify()[:2500])
+        else:
+            print("no row matched")
+    except Exception as e:
+        print("ERROR:", e)
+
+dump_one("HigherEdJobs", "https://www.higheredjobs.com/faculty/search.cfm?JobCat=102", "div.row.record")
+dump_one("CRA", "https://careercenter.cra.org/jobs/", "li.search-item")
