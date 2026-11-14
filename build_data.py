@@ -326,17 +326,22 @@ def split_loc(loc):
             up = parts[-2][:2].upper()
     return city, up
 
-STOP = re.compile(r"\b(faculty|position|positions|open rank|tenure|track|assistant|associate|professor|of|in|the|and|department|for)\b")
 def title_key(t):
-    return re.sub(r"\s+", " ", STOP.sub(" ", t.lower())).strip()
+    # Normalize punctuation/space/case but KEEP the words, so genuinely
+    # different postings at the same school are not collapsed together.
+    # (An earlier version stripped "assistant/professor/of/..." which turned
+    # many distinct titles into the same key and wiped out real jobs.)
+    t = re.sub(r"[^a-z0-9]+", " ", t.lower())
+    return re.sub(r"\s+", " ", t).strip()
 
 def dedupe(jobs):
-    # within source: by URL
+    # within source: by URL (same posting listed twice)
     by_url = {}
     for j in jobs:
         by_url.setdefault(j["u"] or (j["t"] + j["i"]), j)
     jobs = list(by_url.values())
-    # cross source: (institution canon, state, title-key) ; keep CRA over HEJ
+    # cross source: same (institution, state, full normalized title) is the
+    # same posting on both boards; keep CRA's copy (richer location).
     out = {}
     for j in sorted(jobs, key=lambda x: 0 if x["src"] == "CRA" else 1):
         k = (norm(j["i"]), j["s"], title_key(j["t"]))
