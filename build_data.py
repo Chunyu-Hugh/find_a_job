@@ -81,7 +81,7 @@ def scrape_higheredjobs():
         page = 1
         while True:
             url = (f"https://www.higheredjobs.com/faculty/search.cfm"
-                   f"?JobCat={cat}&StartRow={(page-1)*25+1}&NumJobs=25&SortBy=1")
+                   f"?JobCat={cat}&Page={page}&NumJobs=25&SortBy=1")
             r = get(url)
             if not r:
                 break
