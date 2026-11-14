@@ -78,19 +78,32 @@ def scrape_higheredjobs():
     jobs = []
     seen_codes = set()
     for cat, label in HEJ_CATS.items():
-        time.sleep(3)                     # breather between categories (HEJ rate-limits)
+        time.sleep(4)                     # breather between categories (HEJ rate-limits)
         page = 1
+        empty_streak = 0
         while True:
             url = (f"https://www.higheredjobs.com/faculty/search.cfm"
                    f"?JobCat={cat}&Page={page}&NumJobs=25&SortBy=1")
             r = get(url)
             if not r:
-                print(f"  HEJ {label}: page {page} fetch failed, moving on")
-                break
+                print(f"  HEJ {label}: page {page} fetch failed, retrying once")
+                time.sleep(5); r = get(url)
+                if not r:
+                    print(f"  HEJ {label}: giving up this category at page {page}")
+                    break
             soup = BeautifulSoup(r.text, "html.parser")
             rows = soup.select("div.row.record")
             if not rows:
-                break
+                # a transient empty page can happen under rate-limiting; try the
+                # next page a couple of times before concluding the category is done
+                empty_streak += 1
+                print(f"  HEJ {label}: page {page} empty (streak {empty_streak})")
+                if empty_streak >= 2:
+                    break
+                page += 1
+                time.sleep(4)
+                continue
+            empty_streak = 0
             # Codes on this page; used both to dedupe and to detect the
             # end-of-list page-loop (HigherEdJobs wraps back to page 1).
             page_codes = [re.search(r"JobCode=(\d+)", row.select_one("a[href*='details.cfm']")["href"]).group(1)
