@@ -77,34 +77,39 @@ def _hej_textnodes(col):
 def scrape_higheredjobs():
     jobs = []
     seen_codes = set()
-    MAX_PAGES = 8                         # per category; CS tops out ~5 pages
-    for cat, label in HEJ_CATS.items():
-        time.sleep(6)                     # long breather between categories (HEJ rate-limits)
-        prev_first = None
-        for page in range(1, MAX_PAGES + 1):
+    MAX_PAGES = 8
+    prev_first = {c: None for c in HEJ_CATS}      # last page's first code, per category
+    done = set()                                   # categories that reached their end
+    # Round-robin across categories so each one's early (most valuable) pages
+    # are fetched before HigherEdJobs starts rate-limiting a long single-category run.
+    for page in range(1, MAX_PAGES + 1):
+        if len(done) == len(HEJ_CATS):
+            break
+        for cat, label in HEJ_CATS.items():
+            if cat in done:
+                continue
             url = (f"https://www.higheredjobs.com/faculty/search.cfm"
                    f"?JobCat={cat}&Page={page}&NumJobs=25&SortBy=1")
             r = get(url)
             if not r:
-                print(f"  HEJ {label}: page {page} fetch failed, stopping category")
-                break
+                print(f"  HEJ {label}: page {page} fetch failed")
+                time.sleep(4)
+                continue                           # try this category again next round
             soup = BeautifulSoup(r.text, "html.parser")
             rows = soup.select("div.row.record")
             if not rows:
-                # Empty page = past the last real page for this category (or a
-                # rate-limit blip). Either way, stop this category - do NOT keep
-                # hammering, which only deepens the rate-limit.
-                break
+                done.add(cat)
+                continue
             page_codes = [re.search(r"JobCode=(\d+)", row.select_one("a[href*='details.cfm']")["href"]).group(1)
                           for row in rows if row.select_one("a[href*='details.cfm']")]
-            # HEJ wraps back to page 1 past the end: if this page's first code
-            # repeats the previous page's first code, we've looped - stop.
-            if prev_first and page_codes and page_codes[0] == prev_first:
-                break
-            prev_first = page_codes[0] if page_codes else prev_first
+            if prev_first[cat] and page_codes and page_codes[0] == prev_first[cat]:
+                done.add(cat)                       # wrapped back to page 1 = past the end
+                continue
+            prev_first[cat] = page_codes[0] if page_codes else prev_first[cat]
             new_on_page = [c for c in page_codes if c not in seen_codes]
             if page > 1 and not new_on_page:
-                break
+                done.add(cat)
+                continue
             added = 0
             for row in rows:
                 col = row.select_one("div.col-sm-7")
@@ -118,14 +123,12 @@ def scrape_higheredjobs():
                 mcode = re.search(r"JobCode=(\d+)", href)
                 code = mcode.group(1) if mcode else None
                 if code and code in seen_codes:
-                    continue                      # already collected under another category
+                    continue
                 if code:
                     seen_codes.add(code)
                 if href and not href.startswith("http"):
                     href = "https://www.higheredjobs.com/faculty/" + href.lstrip("/")
-                # lines after the title link: [institution, "City, ST"]
                 lines = _hej_textnodes(col)
-                # drop the title line itself
                 lines = [l for l in lines if l != title]
                 inst = lines[0] if lines else ""
                 loc = lines[1] if len(lines) > 1 else ""
@@ -134,8 +137,8 @@ def scrape_higheredjobs():
                 added += 1
             print(f"  HEJ {label}: page {page}, +{added}")
             if len(rows) < 25:
-                break
-            time.sleep(3)                 # pace within a category
+                done.add(cat)
+            time.sleep(2)                           # pace between requests
     print(f"HigherEdJobs: {len(jobs)} raw rows")
     return jobs
 
