@@ -78,12 +78,14 @@ def scrape_higheredjobs():
     jobs = []
     seen_codes = set()
     for cat, label in HEJ_CATS.items():
+        time.sleep(3)                     # breather between categories (HEJ rate-limits)
         page = 1
         while True:
             url = (f"https://www.higheredjobs.com/faculty/search.cfm"
                    f"?JobCat={cat}&Page={page}&NumJobs=25&SortBy=1")
             r = get(url)
             if not r:
+                print(f"  HEJ {label}: page {page} fetch failed, moving on")
                 break
             soup = BeautifulSoup(r.text, "html.parser")
             rows = soup.select("div.row.record")
@@ -131,7 +133,7 @@ def scrape_higheredjobs():
             page += 1
             if page > 40:
                 break
-            time.sleep(1)
+            time.sleep(2)
     print(f"HigherEdJobs: {len(jobs)} raw rows")
     return jobs
 
