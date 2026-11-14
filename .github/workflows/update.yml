@@ -1,19 +1,27 @@
 name: Update job data and deploy
 
-# When this runs:
-#   - every Monday 11:00 UTC (06:00 US Eastern), automatically
-#   - whenever you push to main
-#   - on demand from the Actions tab ("Run workflow")
+# Two things happen here, and they are deliberately separated:
+#   - DEPLOY runs on every push to main and on manual runs -> publishes the
+#     current data.json to GitHub Pages. It never changes the data.
+#   - REBUILD (scraping) runs ONLY when you trigger it by hand with the
+#     "rebuild_data" input set to true. This protects the full 1,787-row
+#     data.json: the automated scrape from GitHub's servers is heavily
+#     rate-limited by HigherEdJobs and would otherwise overwrite it with a
+#     much smaller set. Refresh the data locally instead (see README), or
+#     run this by hand only when you accept the smaller server-side result.
 on:
-  schedule:
-    - cron: "0 11 * * 1"
   push:
     branches: [main]
   workflow_dispatch:
+    inputs:
+      rebuild_data:
+        description: "Re-scrape the sources and overwrite data.json (server-side scrape is rate-limited and returns fewer rows)"
+        type: boolean
+        default: false
 
 permissions:
-  contents: write      # to commit the refreshed data.json
-  pages: write         # to deploy GitHub Pages
+  contents: write
+  pages: write
   id-token: write
 
 concurrency:
@@ -24,26 +32,26 @@ jobs:
   build:
     runs-on: ubuntu-latest
     steps:
-      - name: Check out repo
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
 
       - name: Set up Python
+        if: ${{ github.event_name == 'workflow_dispatch' && inputs.rebuild_data }}
         uses: actions/setup-python@v5
         with:
           python-version: "3.12"
 
       - name: Install dependencies
+        if: ${{ github.event_name == 'workflow_dispatch' && inputs.rebuild_data }}
         run: pip install -r requirements.txt
 
-      - name: Rebuild data.json
+      - name: Rebuild data.json (manual only)
+        if: ${{ github.event_name == 'workflow_dispatch' && inputs.rebuild_data }}
         env:
-          # Optional: set this repo secret to turn on LLM tagging of untitled jobs.
-          # Settings -> Secrets and variables -> Actions -> New repository secret
-          # Name: DEEPSEEK_API_KEY   Value: your key
           DEEPSEEK_API_KEY: ${{ secrets.DEEPSEEK_API_KEY }}
         run: python build_data.py
 
       - name: Commit refreshed data (if changed)
+        if: ${{ github.event_name == 'workflow_dispatch' && inputs.rebuild_data }}
         run: |
           git config user.name  "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
@@ -58,7 +66,7 @@ jobs:
       - name: Upload site as Pages artifact
         uses: actions/upload-pages-artifact@v3
         with:
-          path: .            # the whole repo root is the site (index.html + data.json)
+          path: .
 
   deploy:
     needs: build
