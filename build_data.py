@@ -77,40 +77,32 @@ def _hej_textnodes(col):
 def scrape_higheredjobs():
     jobs = []
     seen_codes = set()
+    MAX_PAGES = 8                         # per category; CS tops out ~5 pages
     for cat, label in HEJ_CATS.items():
-        time.sleep(4)                     # breather between categories (HEJ rate-limits)
-        page = 1
-        empty_streak = 0
-        while True:
+        time.sleep(6)                     # long breather between categories (HEJ rate-limits)
+        prev_first = None
+        for page in range(1, MAX_PAGES + 1):
             url = (f"https://www.higheredjobs.com/faculty/search.cfm"
                    f"?JobCat={cat}&Page={page}&NumJobs=25&SortBy=1")
             r = get(url)
             if not r:
-                print(f"  HEJ {label}: page {page} fetch failed, retrying once")
-                time.sleep(5); r = get(url)
-                if not r:
-                    print(f"  HEJ {label}: giving up this category at page {page}")
-                    break
+                print(f"  HEJ {label}: page {page} fetch failed, stopping category")
+                break
             soup = BeautifulSoup(r.text, "html.parser")
             rows = soup.select("div.row.record")
             if not rows:
-                # a transient empty page can happen under rate-limiting; try the
-                # next page a couple of times before concluding the category is done
-                empty_streak += 1
-                print(f"  HEJ {label}: page {page} empty (streak {empty_streak})")
-                if empty_streak >= 2:
-                    break
-                page += 1
-                time.sleep(4)
-                continue
-            empty_streak = 0
-            # Codes on this page; used both to dedupe and to detect the
-            # end-of-list page-loop (HigherEdJobs wraps back to page 1).
+                # Empty page = past the last real page for this category (or a
+                # rate-limit blip). Either way, stop this category - do NOT keep
+                # hammering, which only deepens the rate-limit.
+                break
             page_codes = [re.search(r"JobCode=(\d+)", row.select_one("a[href*='details.cfm']")["href"]).group(1)
                           for row in rows if row.select_one("a[href*='details.cfm']")]
+            # HEJ wraps back to page 1 past the end: if this page's first code
+            # repeats the previous page's first code, we've looped - stop.
+            if prev_first and page_codes and page_codes[0] == prev_first:
+                break
+            prev_first = page_codes[0] if page_codes else prev_first
             new_on_page = [c for c in page_codes if c not in seen_codes]
-            # Stop only when this page adds NOTHING new within this category's
-            # own run (not merely overlapping another category).
             if page > 1 and not new_on_page:
                 break
             added = 0
@@ -143,10 +135,7 @@ def scrape_higheredjobs():
             print(f"  HEJ {label}: page {page}, +{added}")
             if len(rows) < 25:
                 break
-            page += 1
-            if page > 40:
-                break
-            time.sleep(2)
+            time.sleep(3)                 # pace within a category
     print(f"HigherEdJobs: {len(jobs)} raw rows")
     return jobs
 
