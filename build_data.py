@@ -79,15 +79,16 @@ def scrape_higheredjobs():
     seen_codes = set()
     prev_first = {c: None for c in HEJ_CATS}      # last page's first code, per category
     done = set()                                   # categories that reached their end
-    PAGE_BUDGET = {102: 10, 290: 4, 116: 4, 117: 4}
+    # HigherEdJobs throttles a session after ~6 page requests by returning empty
+    # pages that do NOT recover within a reasonable wait, so there is no point
+    # deep-paging every category. In practice the reliably-fetchable set is each
+    # category's first page plus a couple more for CS (the largest). We fetch in
+    # round-robin (most valuable pages first) and give one short retry per page.
+    PAGE_BUDGET = {102: 6, 290: 2, 116: 2, 117: 2}
     MAX_PAGES = max(PAGE_BUDGET.values())
 
     def fetch_page(cat, page, label):
-        """Fetch one HEJ page with backoff against rate-limiting.
-        Returns (rows) or None if it genuinely could not be fetched.
-        An empty <div.row.record> set is retried a few times (usually a
-        rate-limit blip), since HEJ returns empty pages when throttled."""
-        for attempt in range(4):
+        for attempt in range(2):
             url = (f"https://www.higheredjobs.com/faculty/search.cfm"
                    f"?JobCat={cat}&Page={page}&NumJobs=25&SortBy=1")
             r = get(url)
@@ -95,11 +96,9 @@ def scrape_higheredjobs():
                 rows = BeautifulSoup(r.text, "html.parser").select("div.row.record")
                 if rows:
                     return rows
-            # empty or failed -> back off and retry (throttle usually clears in ~10s)
-            wait = 8 * (attempt + 1)
-            print(f"  HEJ {label}: page {page} empty/failed, backing off {wait}s")
-            time.sleep(wait)
-        return None                                # treat as end-of-category
+            if attempt == 0:
+                time.sleep(6)
+        return None
 
     for page in range(1, MAX_PAGES + 1):
         if len(done) == len(HEJ_CATS):

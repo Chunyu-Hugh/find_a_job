@@ -1,43 +1,36 @@
 #!/usr/bin/env python3
-"""Check which HigherEdJobs JobCat codes actually return results."""
-import re, requests
+"""Inspect CRA location parsing: why do 529 raw CRA rows collapse to ~34 US jobs?"""
+import re, requests, collections
 from bs4 import BeautifulSoup
 UA = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
                     "(KHTML, like Gecko) Chrome/120.0 Safari/537.36"}
 
-def count(cat):
-    url = f"https://www.higheredjobs.com/faculty/search.cfm?JobCat={cat}&Page=1&NumJobs=25&SortBy=1"
-    try:
-        r = requests.get(url, headers=UA, timeout=30)
-        soup = BeautifulSoup(r.text, "html.parser")
-        rows = soup.select("div.row.record")
-        titles = [row.select_one("a[href*='details.cfm']").get_text(strip=True)[:45]
-                  for row in rows[:3] if row.select_one("a[href*='details.cfm']")]
-        return len(rows), titles
-    except Exception as e:
-        return "ERR", [str(e)]
-
-# Probe a range of codes to find the real CS-family categories.
-# Known: 102 works (CS). Test the ones we guessed plus neighbors.
-for cat in [102, 290, 116, 117, 101, 103, 104, 105, 106, 107, 108, 109, 110,
-            111, 112, 113, 114, 115, 118, 119, 120, 291, 292]:
-    n, titles = count(cat)
-    print(f"JobCat={cat}: {n} rows   {titles}")
-
-# Also fetch the search form to read the real category dropdown values.
-print("\n--- category dropdown options from the search form ---")
-try:
-    r = requests.get("https://www.higheredjobs.com/faculty/", headers=UA, timeout=30)
+locs = []
+inst_loc = []
+for page in range(1, 6):   # first 5 pages is plenty to see the pattern
+    r = requests.get(f"https://careercenter.cra.org/jobs/?page={page}", headers=UA, timeout=30)
     soup = BeautifulSoup(r.text, "html.parser")
-    for sel in soup.select("select"):
-        name = sel.get("name","")
-        if "cat" in name.lower() or "JobCat" in name:
-            print(f"select name={name}")
-            for opt in sel.select("option")[:60]:
-                v = opt.get("value","")
-                if v and ("comput" in opt.get_text().lower() or "data" in opt.get_text().lower()
-                          or "electr" in opt.get_text().lower() or "engineer" in opt.get_text().lower()
-                          or "information" in opt.get_text().lower()):
-                    print(f"   {v} = {opt.get_text(strip=True)}")
-except Exception as e:
-    print("ERR", e)
+    for c in soup.select("li.search-item"):
+        smalls = c.select("div.location div.small")
+        inst = smalls[0].get_text(" ", strip=True) if smalls else ""
+        loc = smalls[1].get_text(" ", strip=True) if len(smalls) > 1 else ""
+        locs.append(loc)
+        if len(inst_loc) < 25:
+            inst_loc.append((inst[:30], loc[:40], len(smalls)))
+
+print(f"sampled {len(locs)} CRA rows")
+print("\n--- 25 sample (institution | location | #small divs) ---")
+for i, l, n in inst_loc:
+    print(f"  {n}  {i:32s} | {l!r}")
+print("\n--- location format tally ---")
+has_comma = sum(1 for l in locs if "," in l)
+empty = sum(1 for l in locs if not l.strip())
+print(f"  with comma: {has_comma} | empty: {empty} | total: {len(locs)}")
+# what do the last tokens look like?
+tails = collections.Counter()
+for l in locs:
+    if "," in l:
+        tails[l.rsplit(",",1)[-1].strip()[:15]] += 1
+print("\n--- top 20 location tails (after last comma) ---")
+for t, n in tails.most_common(20):
+    print(f"  {n:3d}  {t!r}")
