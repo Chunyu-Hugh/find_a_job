@@ -77,16 +77,20 @@ def _hej_textnodes(col):
 def scrape_higheredjobs():
     jobs = []
     seen_codes = set()
-    MAX_PAGES = 8
     prev_first = {c: None for c in HEJ_CATS}      # last page's first code, per category
     done = set()                                   # categories that reached their end
+    # Per-category page budget: CS (102) has by far the most US faculty jobs and
+    # its deeper pages are dense with them, so give it more pages; the three
+    # engineering/data categories contribute mostly from their first pages.
+    PAGE_BUDGET = {102: 8, 290: 3, 116: 3, 117: 3}
+    MAX_PAGES = max(PAGE_BUDGET.values())
     # Round-robin across categories so each one's early (most valuable) pages
     # are fetched before HigherEdJobs starts rate-limiting a long single-category run.
     for page in range(1, MAX_PAGES + 1):
         if len(done) == len(HEJ_CATS):
             break
         for cat, label in HEJ_CATS.items():
-            if cat in done:
+            if cat in done or page > PAGE_BUDGET[cat]:
                 continue
             url = (f"https://www.higheredjobs.com/faculty/search.cfm"
                    f"?JobCat={cat}&Page={page}&NumJobs=25&SortBy=1")
