@@ -1,50 +1,43 @@
 #!/usr/bin/env python3
-"""Diagnose HigherEdJobs pagination: find the URL form that actually turns pages.
-Safe to delete after."""
+"""Check which HigherEdJobs JobCat codes actually return results."""
 import re, requests
 from bs4 import BeautifulSoup
-
 UA = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
                     "(KHTML, like Gecko) Chrome/120.0 Safari/537.36"}
 
-def codes(url):
+def count(cat):
+    url = f"https://www.higheredjobs.com/faculty/search.cfm?JobCat={cat}&Page=1&NumJobs=25&SortBy=1"
     try:
         r = requests.get(url, headers=UA, timeout=30)
         soup = BeautifulSoup(r.text, "html.parser")
-        cs = [re.search(r"JobCode=(\d+)", a["href"]).group(1)
-              for a in soup.select("div.row.record a[href*='details.cfm']")
-              if re.search(r"JobCode=(\d+)", a["href"])]
-        # also look for pagination links / result count on the page
-        pag = soup.select("a[href*='StartRow'], a[href*='startrow'], ul.pagination a, a.page-link")
-        pag_hrefs = sorted(set(a.get("href","")[:90] for a in pag))[:8]
-        total = ""
-        m = re.search(r"([\d,]+)\s+(?:jobs|results|positions)", r.text, re.I)
-        if m: total = m.group(0)
-        return r.status_code, cs, pag_hrefs, total
+        rows = soup.select("div.row.record")
+        titles = [row.select_one("a[href*='details.cfm']").get_text(strip=True)[:45]
+                  for row in rows[:3] if row.select_one("a[href*='details.cfm']")]
+        return len(rows), titles
     except Exception as e:
-        return "ERR", [str(e)], [], ""
+        return "ERR", [str(e)]
 
-CAT = 102
-forms = {
-    "faculty StartRow=1":   f"https://www.higheredjobs.com/faculty/search.cfm?JobCat={CAT}&StartRow=1&NumJobs=25",
-    "faculty StartRow=26":  f"https://www.higheredjobs.com/faculty/search.cfm?JobCat={CAT}&StartRow=26&NumJobs=25",
-    "faculty Page=2":       f"https://www.higheredjobs.com/faculty/search.cfm?JobCat={CAT}&Page=2&NumJobs=25",
-    "faculty StartRow=26 noNum": f"https://www.higheredjobs.com/faculty/search.cfm?JobCat={CAT}&StartRow=26",
-    "faculty page 2 path":  f"https://www.higheredjobs.com/faculty/search.cfm?JobCat={CAT}&StartRow=26&SortBy=1&Keyword=&PosType=",
-}
-first = None
-for name, url in forms.items():
-    st, cs, pag, total = codes(url)
-    tag = ""
-    if first is None:
-        first = cs
-        tag = "(baseline page 1)"
-    else:
-        same = cs == first
-        overlap = len(set(cs) & set(first))
-        tag = f"SAME-as-p1={same}  overlap={overlap}/{len(cs)}"
-    print(f"\n[{name}] HTTP {st}  n={len(cs)}  {tag}")
-    print(f"   total-on-page: {total!r}")
-    print(f"   first codes: {cs[:5]}")
-    if pag:
-        print(f"   pagination hrefs seen: {pag}")
+# Probe a range of codes to find the real CS-family categories.
+# Known: 102 works (CS). Test the ones we guessed plus neighbors.
+for cat in [102, 290, 116, 117, 101, 103, 104, 105, 106, 107, 108, 109, 110,
+            111, 112, 113, 114, 115, 118, 119, 120, 291, 292]:
+    n, titles = count(cat)
+    print(f"JobCat={cat}: {n} rows   {titles}")
+
+# Also fetch the search form to read the real category dropdown values.
+print("\n--- category dropdown options from the search form ---")
+try:
+    r = requests.get("https://www.higheredjobs.com/faculty/", headers=UA, timeout=30)
+    soup = BeautifulSoup(r.text, "html.parser")
+    for sel in soup.select("select"):
+        name = sel.get("name","")
+        if "cat" in name.lower() or "JobCat" in name:
+            print(f"select name={name}")
+            for opt in sel.select("option")[:60]:
+                v = opt.get("value","")
+                if v and ("comput" in opt.get_text().lower() or "data" in opt.get_text().lower()
+                          or "electr" in opt.get_text().lower() or "engineer" in opt.get_text().lower()
+                          or "information" in opt.get_text().lower()):
+                    print(f"   {v} = {opt.get_text(strip=True)}")
+except Exception as e:
+    print("ERR", e)
