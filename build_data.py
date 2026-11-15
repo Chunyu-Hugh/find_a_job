@@ -19,7 +19,7 @@ Designed to run unattended (e.g. in GitHub Actions). It is defensive: if one
 source fails or a site's markup shifts, it logs a warning and continues with
 whatever it did collect, so a partial refresh still succeeds.
 """
-import re, sys, json, time, html, datetime, pathlib
+import os, re, sys, json, time, html, datetime, pathlib
 import requests
 from bs4 import BeautifulSoup
 
@@ -79,12 +79,15 @@ def scrape_higheredjobs():
     seen_codes = set()
     prev_first = {c: None for c in HEJ_CATS}      # last page's first code, per category
     done = set()                                   # categories that reached their end
-    # HigherEdJobs throttles a session after ~6 page requests by returning empty
-    # pages that do NOT recover within a reasonable wait, so there is no point
-    # deep-paging every category. In practice the reliably-fetchable set is each
-    # category's first page plus a couple more for CS (the largest). We fetch in
-    # round-robin (most valuable pages first) and give one short retry per page.
-    PAGE_BUDGET = {102: 6, 290: 2, 116: 2, 117: 2}
+    # HigherEdJobs throttles a *datacenter* session (e.g. GitHub Actions) after
+    # ~6 page requests by returning empty pages, so on the server we deliberately
+    # keep the page budget small. From a normal home/office connection there is
+    # no such throttling, so set LOCAL_FULL=1 to deep-page every category and
+    # capture the full ~1,700-row dataset. The refresh.sh helper sets it for you.
+    if os.environ.get("LOCAL_FULL") == "1":
+        PAGE_BUDGET = {102: 80, 290: 80, 116: 80, 117: 80}
+    else:
+        PAGE_BUDGET = {102: 6, 290: 2, 116: 2, 117: 2}
     MAX_PAGES = max(PAGE_BUDGET.values())
 
     def fetch_page(cat, page, label):
@@ -148,7 +151,7 @@ def scrape_higheredjobs():
             print(f"  HEJ {label}: page {page}, +{added}")
             if len(rows) < 25:
                 done.add(cat)
-            time.sleep(2)                           # pace between requests
+            time.sleep(0.5 if os.environ.get("LOCAL_FULL") == "1" else 2)
     print(f"HigherEdJobs: {len(jobs)} raw rows")
     return jobs
 

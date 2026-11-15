@@ -84,6 +84,26 @@ choose to commit them.)
 
 ---
 
+## Refreshing the data from your own computer (gets the FULL ~1,700 rows)
+
+GitHub's servers get rate-limited by HigherEdJobs to ~90 rows, so the big,
+complete dataset has to be scraped from a normal connection — your laptop.
+It's one command:
+
+```bash
+# one time: get the repo onto your computer
+git clone https://github.com/Chunyu-Hugh/find_a_job.git
+cd find_a_job
+
+# any time you want fresh data:
+bash refresh.sh
+```
+
+`refresh.sh` pulls the latest code, scrapes the full dataset (a few minutes),
+commits the new `data.json`, and pushes it. Your site updates automatically a
+minute or two later. To also let DeepSeek tag untitled jobs, run
+`export DEEPSEEK_API_KEY=sk-...` before `bash refresh.sh`.
+
 ## Updating the data
 
 - **Automatic:** every Monday, and on every push. Nothing to do.
